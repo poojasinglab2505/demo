@@ -6,6 +6,7 @@ from flask import Flask, Response, flash, redirect, render_template, request, ur
 
 from ..apollo_client import ApolloClient
 from ..config import Settings
+from ..csv_import import parse_leads_csv
 from ..email_gen import render_email
 from ..emailer import SendGridClient
 from ..storage import (
@@ -43,6 +44,29 @@ def create_app() -> Flask:
             leads = list_leads(conn)
             counts = status_counts(conn)
         return render_template("index.html", leads=leads, counts=counts)
+
+    @app.route("/import", methods=["POST"])
+    def import_csv():
+        file = request.files.get("csv_file")
+        if not file or not file.filename:
+            flash("Choose a CSV file to import.", "error")
+            return redirect(url_for("index"))
+
+        try:
+            text = file.stream.read().decode("utf-8-sig")
+            leads = parse_leads_csv(text)
+        except Exception as exc:
+            flash(f"CSV import failed: {exc}", "error")
+            return redirect(url_for("index"))
+
+        added = 0
+        with connect() as conn:
+            for lead in leads:
+                if upsert_lead(conn, lead):
+                    added += 1
+
+        flash(f"Imported {len(leads)} rows, added {added} new leads.", "success")
+        return redirect(url_for("index"))
 
     @app.route("/find", methods=["POST"])
     def find():

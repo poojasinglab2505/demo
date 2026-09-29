@@ -1,16 +1,18 @@
 # leadgen
 
-Finds business leads (sourced from LinkedIn-derived data via Apollo.io's
-API — not scraped directly, which would violate LinkedIn's Terms of
-Service) and sends them personalized cold emails via SendGrid.
+Manages business leads and sends them personalized cold emails via SendGrid.
+Leads can be **imported from a CSV** (free, no API needed) or, if you have a
+paid Apollo.io plan, found automatically through Apollo's People Search API.
 
 ## Why not scrape LinkedIn directly?
 
 Automated scraping of LinkedIn breaches its User Agreement, risks account
 bans and legal action (see *hiQ v. LinkedIn* and LinkedIn's own enforcement
-history), and provides no reliable delivery infrastructure. This tool
-instead uses [Apollo.io](https://apollo.io), a data provider that licenses
-LinkedIn-derived contact data through a proper API.
+history), and provides no reliable delivery infrastructure. If you want
+automated lead search rather than CSV import, use a licensed data provider
+like [Apollo.io](https://apollo.io) instead — **note that Apollo's free plan
+blocks API access entirely**; their People Search API requires a paid plan
+(roughly $59+/month). CSV import (below) needs no paid API at all.
 
 ## Setup
 
@@ -22,8 +24,8 @@ cp .env.example .env   # then fill in your API keys
 ```
 
 You'll need:
-- An [Apollo.io](https://apollo.io) API key (free tier available) for lead search.
 - A [SendGrid](https://sendgrid.com) API key and a verified sender for sending mail.
+- Optionally, a **paid** [Apollo.io](https://apollo.io) plan and API key, only if you want automated lead search instead of CSV import.
 
 ## Usage
 
@@ -34,8 +36,9 @@ python -m leadgen.cli serve
 # then open http://127.0.0.1:5000
 ```
 
-The dashboard lets you: search for leads, preview a campaign (dry run) or send
-it for real, see every lead's status, and unsubscribe anyone with one click.
+The dashboard lets you: import leads from a CSV (or search via Apollo, if you
+have a paid plan), preview a campaign (dry run) or send it for real, see every
+lead's status, and unsubscribe anyone with one click.
 
 Running it locally with no `DASHBOARD_PASSWORD` set is fine (open access).
 **If you deploy it publicly, set `DASHBOARD_PASSWORD`** (see below) — otherwise
@@ -76,7 +79,12 @@ for a hosted Postgres database once you outgrow SQLite.
 ### CLI
 
 ```bash
-# 1. Find leads and store them locally (deduped) in leads.db
+# 1a. Import leads from a CSV (see leads_template.csv for the expected format —
+#     just needs an 'email' column, plus optional first_name/last_name/title/
+#     company/linkedin_url/industry columns)
+python -m leadgen.cli import-csv leads_template.csv
+
+# 1b. Or, if you have a paid Apollo.io plan, find leads automatically:
 python -m leadgen.cli find --title "Head of Sales" --location "United States" --max-results 25
 
 # 2. Preview the emails before sending anything
@@ -104,11 +112,13 @@ This tool builds in the basics, but **you are responsible for compliance**:
 
 ```
 leadgen/
-  apollo_client.py   # lead sourcing (Apollo.io People Search API)
-  emailer.py          # sending (SendGrid API)
-  email_gen.py        # renders personalized email from a Jinja2 template
-  templates/           # editable cold email template
-  storage.py           # SQLite: dedupe, sent/unsubscribe tracking
-  cli.py               # `find`, `send`, `unsubscribe`, `serve` commands
-  web/                 # Flask dashboard (app.py, templates/, static/)
+  csv_import.py       # lead sourcing from a CSV file (no paid API needed)
+  apollo_client.py     # lead sourcing via Apollo.io People Search API (paid plan required)
+  emailer.py           # sending (SendGrid API)
+  email_gen.py         # renders personalized email from a Jinja2 template
+  templates/            # editable cold email template
+  storage.py            # SQLite: dedupe, sent/unsubscribe tracking
+  cli.py                # `import-csv`, `find`, `send`, `unsubscribe`, `serve` commands
+  web/                  # Flask dashboard (app.py, templates/, static/)
+leads_template.csv     # example CSV for import-csv / the dashboard's Import panel
 ```

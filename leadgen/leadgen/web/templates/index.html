@@ -10,7 +10,21 @@
 
 <section class="panels">
   <div class="panel">
-    <h2>1. Find leads</h2>
+    <h2>1. Import leads (CSV)</h2>
+    <form method="post" action="{{ url_for('import_csv') }}" enctype="multipart/form-data">
+      <label>CSV file
+        <input type="file" name="csv_file" accept=".csv" required>
+      </label>
+      <p class="hint">
+        Needs an <code>email</code> column, plus any of: first_name, last_name,
+        title, company, linkedin_url, industry.
+      </p>
+      <button type="submit">Import</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>1b. Find leads via Apollo <span class="hint">(requires a paid Apollo plan)</span></h2>
     <form method="post" action="{{ url_for('find') }}">
       <label>Job titles (comma-separated)
         <input type="text" name="titles" placeholder="Head of Sales, VP Marketing" required>
@@ -78,7 +92,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6">No leads yet — use the form above to find some.</td></tr>
+      <tr><td colspan="6">No leads yet — import a CSV above to get started.</td></tr>
       {% endfor %}
     </tbody>
   </table>
