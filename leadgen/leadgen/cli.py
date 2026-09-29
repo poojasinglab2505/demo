@@ -92,5 +92,15 @@ def unsubscribe(email):
     click.echo(f"{email} marked as unsubscribed.")
 
 
+@cli.command()
+@click.option("--port", default=5000, show_default=True)
+@click.option("--debug", is_flag=True)
+def serve(port, debug):
+    """Run the web dashboard for finding leads and sending campaigns."""
+    from .web.app import create_app
+
+    create_app().run(port=port, debug=debug)
+
+
 if __name__ == "__main__":
     cli()

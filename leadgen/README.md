@@ -27,6 +27,19 @@ You'll need:
 
 ## Usage
 
+### Web dashboard
+
+```bash
+python -m leadgen.cli serve
+# then open http://127.0.0.1:5000
+```
+
+The dashboard lets you: search for leads, preview a campaign (dry run) or send
+it for real, see every lead's status, and unsubscribe anyone with one click.
+It's a local tool with no authentication — don't expose it on the open internet.
+
+### CLI
+
 ```bash
 # 1. Find leads and store them locally (deduped) in leads.db
 python -m leadgen.cli find --title "Head of Sales" --location "United States" --max-results 25
@@ -61,5 +74,6 @@ leadgen/
   email_gen.py        # renders personalized email from a Jinja2 template
   templates/           # editable cold email template
   storage.py           # SQLite: dedupe, sent/unsubscribe tracking
-  cli.py               # `find`, `send`, `unsubscribe` commands
+  cli.py               # `find`, `send`, `unsubscribe`, `serve` commands
+  web/                 # Flask dashboard (app.py, templates/, static/)
 ```

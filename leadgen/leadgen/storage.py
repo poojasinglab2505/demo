@@ -68,3 +68,14 @@ def leads_to_email(conn, limit: int):
         "SELECT * FROM leads WHERE status NOT IN ('sent', 'unsubscribed', 'bounced') LIMIT ?",
         (limit,),
     ).fetchall()
+
+
+def list_leads(conn):
+    return conn.execute("SELECT * FROM leads ORDER BY rowid DESC").fetchall()
+
+
+def status_counts(conn) -> dict:
+    rows = conn.execute("SELECT status, COUNT(*) AS n FROM leads GROUP BY status").fetchall()
+    counts = {row["status"]: row["n"] for row in rows}
+    counts["total"] = sum(counts.values())
+    return counts
