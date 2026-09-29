@@ -41,22 +41,31 @@ Running it locally with no `DASHBOARD_PASSWORD` set is fine (open access).
 **If you deploy it publicly, set `DASHBOARD_PASSWORD`** (see below) — otherwise
 anyone with the URL can burn your Apollo/SendGrid credits or send email as you.
 
-### Deploying it publicly (e.g. on Render)
+### Deploying it publicly
 
-This is a normal Flask app, so any host that runs Python works (Render,
-Railway, Fly.io, a VPS, etc). Steps for [Render](https://render.com), free tier:
+This is a normal Flask app packaged with a `Dockerfile`, so any host that runs
+containers works (Railway, Fly.io, Render, a VPS, etc).
+
+#### Railway (recommended)
 
 1. Push this repo to GitHub (already done if you're reading this from the repo).
-2. In Render: **New → Web Service**, connect the repo.
-3. Set **Root Directory** to `leadgen`.
-4. **Build Command**: `pip install -r requirements.txt`
-5. **Start Command**: `gunicorn leadgen.wsgi:app`
-6. Under **Environment**, add the variables from `.env.example`
-   (`APOLLO_API_KEY`, `SENDGRID_API_KEY`, `FROM_EMAIL`, `FROM_NAME`,
-   `COMPANY_POSTAL_ADDRESS`, and — important for a public URL —
-   `DASHBOARD_PASSWORD` and `FLASK_SECRET_KEY`, both set to random strings).
-7. Deploy. Render gives you a public `https://<your-app>.onrender.com` URL —
-   log in with `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`.
+2. Go to [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo** → select this repo.
+3. Open the new service's **Settings**:
+   - **Root Directory**: `leadgen`
+   - Railway will detect the `Dockerfile` automatically and use it to build — no build/start command needed.
+4. Go to **Variables** and add: `APOLLO_API_KEY`, `SENDGRID_API_KEY`, `FROM_EMAIL`,
+   `FROM_NAME`, `COMPANY_POSTAL_ADDRESS`, and — important for a public URL —
+   `DASHBOARD_PASSWORD` and `FLASK_SECRET_KEY` (set both to random strings, e.g.
+   from `python -c "import secrets; print(secrets.token_hex(16))"`).
+5. Under **Settings → Networking**, click **Generate Domain** to get a public
+   `https://<your-app>.up.railway.app` URL.
+6. Deploy. Log in to the dashboard with `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`.
+
+#### Render (alternative)
+
+Render also works, using the included `render.yaml` (New → Blueprint,
+pointed at the branch that has this code) or the same Root Directory /
+Dockerfile settings as above under a manually created Web Service.
 
 **Note on the database:** `leads.db` is a local SQLite file. On most free
 hosting tiers the filesystem is wiped on every redeploy/restart, so your
