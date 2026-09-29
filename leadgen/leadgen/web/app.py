@@ -1,6 +1,8 @@
+import os
+import secrets
 import time
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, Response, flash, redirect, render_template, request, url_for
 
 from ..apollo_client import ApolloClient
 from ..config import Settings
@@ -20,7 +22,20 @@ from ..storage import (
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.secret_key = "leadgen-dashboard"  # only used to sign flash messages for this local tool
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(16)
+
+    dashboard_user = os.environ.get("DASHBOARD_USERNAME", "admin")
+    dashboard_password = os.environ.get("DASHBOARD_PASSWORD", "")
+
+    @app.before_request
+    def require_auth():
+        if not dashboard_password:
+            return  # no password configured (local/dev use) — leave open
+        auth = request.authorization
+        if not auth or auth.username != dashboard_user or auth.password != dashboard_password:
+            return Response(
+                "Login required", 401, {"WWW-Authenticate": 'Basic realm="Leadgen"'}
+            )
 
     @app.route("/")
     def index():

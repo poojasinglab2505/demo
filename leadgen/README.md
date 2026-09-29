@@ -36,7 +36,33 @@ python -m leadgen.cli serve
 
 The dashboard lets you: search for leads, preview a campaign (dry run) or send
 it for real, see every lead's status, and unsubscribe anyone with one click.
-It's a local tool with no authentication — don't expose it on the open internet.
+
+Running it locally with no `DASHBOARD_PASSWORD` set is fine (open access).
+**If you deploy it publicly, set `DASHBOARD_PASSWORD`** (see below) — otherwise
+anyone with the URL can burn your Apollo/SendGrid credits or send email as you.
+
+### Deploying it publicly (e.g. on Render)
+
+This is a normal Flask app, so any host that runs Python works (Render,
+Railway, Fly.io, a VPS, etc). Steps for [Render](https://render.com), free tier:
+
+1. Push this repo to GitHub (already done if you're reading this from the repo).
+2. In Render: **New → Web Service**, connect the repo.
+3. Set **Root Directory** to `leadgen`.
+4. **Build Command**: `pip install -r requirements.txt`
+5. **Start Command**: `gunicorn leadgen.wsgi:app`
+6. Under **Environment**, add the variables from `.env.example`
+   (`APOLLO_API_KEY`, `SENDGRID_API_KEY`, `FROM_EMAIL`, `FROM_NAME`,
+   `COMPANY_POSTAL_ADDRESS`, and — important for a public URL —
+   `DASHBOARD_PASSWORD` and `FLASK_SECRET_KEY`, both set to random strings).
+7. Deploy. Render gives you a public `https://<your-app>.onrender.com` URL —
+   log in with `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`.
+
+**Note on the database:** `leads.db` is a local SQLite file. On most free
+hosting tiers the filesystem is wiped on every redeploy/restart, so your
+lead list and send history won't persist. That's fine for trying it out; for
+real use, either enable Render's persistent disk add-on, or swap `storage.py`
+for a hosted Postgres database once you outgrow SQLite.
 
 ### CLI
 
