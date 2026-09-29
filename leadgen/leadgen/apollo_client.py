@@ -1,5 +1,7 @@
 """Client for Apollo.io's People Search API — a legitimate, ToS-compliant
 source of LinkedIn-derived business contact data (no LinkedIn scraping)."""
+from __future__ import annotations
+
 import requests
 
 from .models import Lead
