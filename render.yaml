@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: leadgen
+    runtime: python
+    rootDir: leadgen
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn leadgen.wsgi:app
+    envVars:
+      - key: APOLLO_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: FROM_NAME
+        sync: false
+      - key: COMPANY_POSTAL_ADDRESS
+        sync: false
+      - key: DAILY_SEND_LIMIT
+        value: "50"
+      - key: SEND_DELAY_SECONDS
+        value: "3"
+      - key: DASHBOARD_USERNAME
+        value: admin
+      - key: DASHBOARD_PASSWORD
+        generateValue: true
+      - key: FLASK_SECRET_KEY
+        generateValue: true
