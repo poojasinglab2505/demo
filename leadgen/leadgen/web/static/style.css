@@ -59,13 +59,23 @@ main {
 
 .panels {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 960px) {
+  .panels { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 620px) {
   .panels { grid-template-columns: 1fr; }
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .panel {

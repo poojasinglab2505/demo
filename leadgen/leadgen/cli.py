@@ -4,6 +4,7 @@ import click
 
 from .apollo_client import ApolloClient
 from .config import Settings
+from .csv_import import parse_leads_csv
 from .email_gen import render_email
 from .emailer import SendGridClient
 from .storage import (
@@ -28,7 +29,12 @@ def cli():
 @click.option("--location", "locations", multiple=True, help="Location to target, e.g. 'United States'. Repeatable.")
 @click.option("--max-results", default=25, show_default=True)
 def find(titles, industries, locations, max_results):
-    """Find leads via Apollo.io and store them locally."""
+    """Find leads via Apollo.io and store them locally.
+
+    Note: Apollo's People Search API requires a paid Apollo plan (their
+    free tier blocks this endpoint entirely). If you're on the free tier,
+    use `import-csv` instead.
+    """
     settings = Settings.load()
     client = ApolloClient(settings.apollo_api_key)
     leads = client.search_leads(
@@ -45,6 +51,26 @@ def find(titles, industries, locations, max_results):
             if upsert_lead(conn, lead):
                 added += 1
     click.echo(f"Found {len(leads)} leads, added {added} new ones to leads.db")
+
+
+@cli.command(name="import-csv")
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False))
+def import_csv_cmd(csv_path):
+    """Import leads from a CSV file (no paid API needed).
+
+    The CSV needs an 'email' column, plus any of: first_name, last_name,
+    title, company, linkedin_url, industry. Header names are matched
+    loosely (e.g. "Email Address" or "First Name" both work).
+    """
+    with open(csv_path, encoding="utf-8-sig") as f:
+        leads = parse_leads_csv(f.read())
+
+    added = 0
+    with connect() as conn:
+        for lead in leads:
+            if upsert_lead(conn, lead):
+                added += 1
+    click.echo(f"Parsed {len(leads)} rows, added {added} new leads to leads.db")
 
 
 @cli.command()
