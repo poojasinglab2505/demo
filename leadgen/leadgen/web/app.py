@@ -9,6 +9,7 @@ from ..config import Settings
 from ..csv_import import parse_leads_csv
 from ..email_gen import render_email
 from ..emailer import SendGridClient
+from ..hunter_client import HunterClient
 from ..storage import (
     already_sent,
     connect,
@@ -66,6 +67,33 @@ def create_app() -> Flask:
                     added += 1
 
         flash(f"Imported {len(leads)} rows, added {added} new leads.", "success")
+        return redirect(url_for("index"))
+
+    @app.route("/hunter-find", methods=["POST"])
+    def hunter_find():
+        settings = Settings.load()
+        domain = request.form.get("domain", "").strip()
+        company_name = request.form.get("company_name", "").strip()
+        max_results = int(request.form.get("hunter_max_results") or 25)
+
+        if not domain:
+            flash("Enter a company domain to search.", "error")
+            return redirect(url_for("index"))
+
+        try:
+            client = HunterClient(settings.hunter_api_key)
+            leads = client.search_by_domain(domain, company_name, max_results)
+        except Exception as exc:
+            flash(f"Hunter search failed: {exc}", "error")
+            return redirect(url_for("index"))
+
+        added = 0
+        with connect() as conn:
+            for lead in leads:
+                if upsert_lead(conn, lead):
+                    added += 1
+
+        flash(f"Found {len(leads)} leads at {domain}, added {added} new ones.", "success")
         return redirect(url_for("index"))
 
     @app.route("/find", methods=["POST"])
