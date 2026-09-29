@@ -9,6 +9,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     apollo_api_key: str
+    hunter_api_key: str
     sendgrid_api_key: str
     from_email: str
     from_name: str
@@ -20,6 +21,7 @@ class Settings:
     def load(cls) -> "Settings":
         return cls(
             apollo_api_key=os.environ.get("APOLLO_API_KEY", ""),
+            hunter_api_key=os.environ.get("HUNTER_API_KEY", ""),
             sendgrid_api_key=os.environ.get("SENDGRID_API_KEY", ""),
             from_email=os.environ.get("FROM_EMAIL", ""),
             from_name=os.environ.get("FROM_NAME", ""),

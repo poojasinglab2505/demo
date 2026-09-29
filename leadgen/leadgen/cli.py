@@ -7,6 +7,7 @@ from .config import Settings
 from .csv_import import parse_leads_csv
 from .email_gen import render_email
 from .emailer import SendGridClient
+from .hunter_client import HunterClient
 from .storage import (
     already_sent,
     connect,
@@ -51,6 +52,27 @@ def find(titles, industries, locations, max_results):
             if upsert_lead(conn, lead):
                 added += 1
     click.echo(f"Found {len(leads)} leads, added {added} new ones to leads.db")
+
+
+@cli.command(name="hunter-find")
+@click.option("--domain", required=True, help="Company domain to search, e.g. stripe.com")
+@click.option("--company-name", default="", help="Company display name (optional, defaults to domain/organization).")
+@click.option("--max-results", default=25, show_default=True)
+def hunter_find(domain, company_name, max_results):
+    """Find leads at a company via Hunter.io's Domain Search.
+
+    Hunter's free plan includes API access (~25 searches/month), unlike
+    Apollo's free plan which blocks API access entirely.
+    """
+    settings = Settings.load()
+    client = HunterClient(settings.hunter_api_key)
+    leads = client.search_by_domain(domain, company_name, max_results)
+    added = 0
+    with connect() as conn:
+        for lead in leads:
+            if upsert_lead(conn, lead):
+                added += 1
+    click.echo(f"Found {len(leads)} leads at {domain}, added {added} new ones to leads.db")
 
 
 @cli.command(name="import-csv")

@@ -6,6 +6,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn leadgen.wsgi:app
     envVars:
+      - key: HUNTER_API_KEY
+        sync: false
       - key: APOLLO_API_KEY
         sync: false
       - key: SENDGRID_API_KEY
