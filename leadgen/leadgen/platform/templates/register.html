@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-form">
+  <h2>Create your company account</h2>
+  <form method="post">
+    <label>Company name
+      <input type="text" name="company_name" required>
+    </label>
+    <label>Work email
+      <input type="email" name="email" required>
+    </label>
+    <label>Password (min 8 characters)
+      <input type="password" name="password" minlength="8" required>
+    </label>
+    <button type="submit">Create account</button>
+  </form>
+  <p class="hint">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+</div>
+{% endblock %}
