@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="panels">
+  <div class="panel">
+    <h2>Your agent</h2>
+    {% if config %}
+      <p class="hint">
+        Runs every {{ config.run_frequency_hours }}h.
+        {% if config.last_run_at %}Last ran {{ config.last_run_at.strftime('%Y-%m-%d %H:%M UTC') }}.{% else %}Hasn't run yet.{% endif %}
+      </p>
+      {% if config.last_run_summary %}<p class="hint">{{ config.last_run_summary }}</p>{% endif %}
+      {% if not config.target_domains and not config.apollo_api_key_enc %}
+        <p class="hint">No target domains or Apollo key configured yet — <a href="{{ url_for('agent_config_view') }}">set up your agent</a> before running it.</p>
+      {% endif %}
+    {% else %}
+      <p class="hint">You haven't configured an agent yet.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('run_now') }}">
+      <button type="submit">Run agent now</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Send a campaign</h2>
+    <form method="post" action="{{ url_for('send_campaign') }}">
+      <label>Pitch
+        <textarea name="pitch" rows="3" placeholder="One or two sentences describing your offer." required></textarea>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="dry_run" checked>
+        Dry run (preview only, don't actually send)
+      </label>
+      <button type="submit">Run campaign</button>
+    </form>
+  </div>
+</section>
+
+<section class="leads">
+  <h2>Leads ({{ leads|length }})</h2>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Fit</th><th>Status</th><th>Signals</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for lead in leads %}
+      <tr>
+        <td>{{ lead.first_name }} {{ lead.last_name }}</td>
+        <td>{{ lead.title }}</td>
+        <td>{{ lead.lead_company }}</td>
+        <td>{{ lead.email }}</td>
+        <td><span class="badge">{{ lead.icp_score }}</span></td>
+        <td><span class="badge badge-{{ lead.status }}">{{ lead.status }}</span></td>
+        <td>{% if lead.signal_notes %}<pre class="signal-notes">{{ lead.signal_notes }}</pre>{% endif %}</td>
+        <td>
+          {% if lead.status != 'unsubscribed' %}
+          <form method="post" action="{{ url_for('unsubscribe', lead_id=lead.id) }}">
+            <button type="submit" class="link-button">Unsubscribe</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">No leads yet — configure and run your agent to find some.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

@@ -214,10 +214,46 @@ def unsubscribe(email):
 @click.option("--port", default=5000, show_default=True)
 @click.option("--debug", is_flag=True)
 def serve(port, debug):
-    """Run the web dashboard for finding leads and sending campaigns."""
+    """Run the single-company web dashboard for finding leads and sending campaigns."""
     from .web.app import create_app
 
     create_app().run(port=port, debug=debug)
+
+
+@cli.command(name="platform-serve")
+@click.option("--port", default=5050, show_default=True)
+@click.option("--debug", is_flag=True)
+def platform_serve(port, debug):
+    """Run the multi-tenant platform: companies register, configure their own
+    agent, and get their own lead database. Needs DATABASE_URL and
+    APP_SECRET_KEY set — see .env.example."""
+    from .platform.app import create_platform_app
+
+    create_platform_app().run(port=port, debug=debug)
+
+
+@cli.command(name="platform-init-db")
+def platform_init_db():
+    """Create the platform's database tables (safe to re-run)."""
+    from .platform.db import init_db
+
+    init_db()
+    click.echo("Platform database tables created.")
+
+
+@cli.command(name="platform-scheduler-loop")
+def platform_scheduler_loop():
+    """Run the platform's agent scheduler as a standalone, blocking process.
+
+    Use this (as a separate worker/dyno, with ENABLE_SCHEDULER=false on the
+    web process) once you run the web app with more than one gunicorn
+    worker — otherwise every worker starts its own scheduler and duplicates
+    agent runs and emails.
+    """
+    from .platform.scheduler import run_scheduler_forever
+
+    click.echo("Starting platform scheduler (checks every 15 minutes)...")
+    run_scheduler_forever()
 
 
 if __name__ == "__main__":

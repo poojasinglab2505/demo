@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Configure your AI agent</h2>
+<form method="post">
+
+  <fieldset>
+    <legend>Who to target</legend>
+    <label>Job titles (comma-separated)
+      <input type="text" name="title_keywords" value="{{ config.title_keywords }}" placeholder="CEO, VP Sales, Head of Marketing">
+    </label>
+    <label>Industries (comma-separated, optional)
+      <input type="text" name="industry_keywords" value="{{ config.industry_keywords }}" placeholder="Software, SaaS">
+    </label>
+    <label>Target company domains to search (comma-separated) <span class="hint">— used with Hunter.io</span>
+      <input type="text" name="target_domains" value="{{ config.target_domains }}" placeholder="stripe.com, acme.com">
+    </label>
+    <div class="grid-2">
+      <label>Min company size (employees)
+        <input type="number" name="company_size_min" value="{{ config.company_size_min }}" min="0">
+      </label>
+      <label>Max company size (0 = no max)
+        <input type="number" name="company_size_max" value="{{ config.company_size_max }}" min="0">
+      </label>
+    </div>
+    <div class="grid-2">
+      <label>Min revenue ($)
+        <input type="number" name="revenue_min" value="{{ config.revenue_min }}" min="0">
+      </label>
+      <label>Max revenue ($) (0 = no max)
+        <input type="number" name="revenue_max" value="{{ config.revenue_max }}" min="0">
+      </label>
+    </div>
+    <p class="hint">
+      Company size only filters results when using a paid Apollo plan (Hunter's free
+      Domain Search doesn't support it). Revenue is stored for your reference but isn't
+      enforced by either free data source today — it's here for when you connect a
+      provider that supports it.
+    </p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Signals</legend>
+    <label class="checkbox">
+      <input type="checkbox" name="enable_funding_signal_check" {% if config.enable_funding_signal_check %}checked{% endif %}>
+      Check for funding-news mentions of each lead's company (free, best-effort via Hacker News search — not a paid intent-data feed)
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Schedule</legend>
+    <label>Run every
+      <select name="run_frequency_hours">
+        <option value="6" {% if config.run_frequency_hours == 6 %}selected{% endif %}>6 hours</option>
+        <option value="24" {% if config.run_frequency_hours == 24 %}selected{% endif %}>24 hours</option>
+        <option value="168" {% if config.run_frequency_hours == 168 %}selected{% endif %}>Weekly</option>
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Your API keys</legend>
+    <p class="hint">Bring your own keys — leave a field blank to keep its current saved value unchanged.</p>
+    <label>Hunter.io API key <span class="hint">(free plan works — hunter.io/api-keys)</span>
+      <input type="password" name="hunter_api_key" placeholder="{% if config.hunter_api_key_enc %}(saved — leave blank to keep){% else %}not set{% endif %}">
+    </label>
+    <label>Apollo.io API key <span class="hint">(requires a paid Apollo plan)</span>
+      <input type="password" name="apollo_api_key" placeholder="{% if config.apollo_api_key_enc %}(saved — leave blank to keep){% else %}not set{% endif %}">
+    </label>
+    <label>SendGrid API key <span class="hint">(required to actually send campaigns)</span>
+      <input type="password" name="sendgrid_api_key" placeholder="{% if config.sendgrid_api_key_enc %}(saved — leave blank to keep){% else %}not set{% endif %}">
+    </label>
+    <label>Anthropic API key <span class="hint">(optional, for AI-personalized icebreakers)</span>
+      <input type="password" name="anthropic_api_key" placeholder="{% if config.anthropic_api_key_enc %}(saved — leave blank to keep){% else %}not set{% endif %}">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sender details (required for sending, CAN-SPAM compliance)</legend>
+    <label>From name
+      <input type="text" name="from_name" value="{{ config.from_name }}">
+    </label>
+    <label>From email
+      <input type="email" name="from_email" value="{{ config.from_email }}">
+    </label>
+    <label>Company postal address
+      <input type="text" name="company_postal_address" value="{{ config.company_postal_address }}">
+    </label>
+  </fieldset>
+
+  <button type="submit">Save configuration</button>
+</form>
+
+{% endblock %}

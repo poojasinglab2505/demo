@@ -169,6 +169,71 @@ default (`ICEBREAKER_MODEL` in `.env` to change it) — a short sentence per
 lead costs a small fraction of a cent, but it does add up across a large
 list, so it's opt-in rather than automatic.
 
+## Multi-tenant platform: let other companies configure their own agent
+
+Everything above is a single-company tool (one `.env`, one `leads.db`). This
+repo also includes a separate **multi-tenant platform** where companies
+register their own account, configure their own targeting criteria and bring
+their own API keys, and get an agent that runs automatically on a schedule
+into their own isolated lead database.
+
+### What a company configures
+
+- **Who to target**: job titles (CEO, VP Sales, etc.), industries, target
+  company domains to search
+- **Company size** (min/max employees) — only enforced when the company has a
+  paid Apollo key; Hunter's free Domain Search doesn't support this filter
+- **Revenue** (min/max) — stored for reference; not enforced by either free
+  data source today (would need a paid provider that returns revenue data)
+- **Signals**: opt in to the free, best-effort funding-news check
+- **Schedule**: run every 6h / 24h / weekly
+- **Their own API keys**: Hunter/Apollo/SendGrid/Anthropic — encrypted at
+  rest, never shared across companies
+
+### Architecture
+
+- **Auth**: simple email+password, hashed with Werkzeug, session cookies
+- **Database**: PostgreSQL via SQLAlchemy (`DATABASE_URL`) — falls back to a
+  local SQLite file for dev, which is **not** safe for concurrent multi-tenant
+  writes, so set a real `DATABASE_URL` before running this for real
+- **Scheduling**: APScheduler checks every 15 minutes for companies whose
+  agent is due, based on `run_frequency_hours` / `last_run_at`
+- **Credential storage**: each company's API keys are encrypted with Fernet
+  (`APP_SECRET_KEY`) before being written to the database
+- **Lead sourcing/scoring/emailing**: reuses the same `hunter_client.py`,
+  `apollo_client.py`, `icp.py`, `signals.py`, `email_gen.py`, and `emailer.py`
+  modules as the single-company tool — just scoped per company
+
+### Running it
+
+```bash
+# One-time: create the tables (needs DATABASE_URL and APP_SECRET_KEY set)
+python -m leadgen.cli platform-init-db
+
+# Run the platform web app
+python -m leadgen.cli platform-serve
+# then open http://127.0.0.1:5050, register a company, and configure its agent
+```
+
+### Deploying it
+
+Same Dockerfile/Railway/Render approach as the single-company tool (see
+above), but as its own service:
+
+- **Build/start**: point the service at `leadgen.platform_wsgi:app` instead of
+  `leadgen.wsgi:app` (e.g. `gunicorn leadgen.platform_wsgi:app`)
+- **Required env vars**: `DATABASE_URL` (a real Postgres instance — Railway/
+  Render both offer a one-click Postgres add-on) and `APP_SECRET_KEY` (a long
+  random string — also used to encrypt stored API keys, so don't lose it)
+- **Run `platform-init-db` once** against the deployed database before first use
+- **Scheduler + multiple workers don't mix**: the web process auto-starts an
+  in-process scheduler by default (`ENABLE_SCHEDULER=true`). That's fine with
+  a single gunicorn worker. If you scale to more than one worker, set
+  `ENABLE_SCHEDULER=false` on the web service and instead run
+  `python -m leadgen.cli platform-scheduler-loop` as its own separate
+  worker/dyno — otherwise every web worker runs its own scheduler and
+  duplicates agent runs and emails.
+
 ## Compliance checklist (CAN-SPAM / GDPR)
 
 This tool builds in the basics, but **you are responsible for compliance**:
@@ -196,6 +261,18 @@ leadgen/
   storage.py             # SQLite: dedupe, sent/unsubscribe tracking, ICP scores, signal notes
   cli.py                 # `import-csv`, `hunter-find`, `find`, `send`, `rescore`, `add-signal`,
                          # `check-funding-signal`, `unsubscribe`, `serve` commands
-  web/                   # Flask dashboard (app.py, templates/, static/)
+  web/                   # single-company Flask dashboard (app.py, templates/, static/)
+  wsgi.py                # WSGI entry point for the single-company dashboard
+  platform_wsgi.py       # WSGI entry point for the multi-tenant platform
+  platform/              # multi-tenant SaaS: companies register, configure their
+                         # own agent, get their own isolated lead database
+    db.py                 # SQLAlchemy engine/session (Postgres, SQLite fallback for dev)
+    models.py             # Company, User, AgentConfig, Lead ORM models
+    crypto.py             # Fernet encryption for each company's stored API keys
+    auth.py                # registration/login/session helpers
+    agent_runner.py       # runs one company's agent (Hunter/Apollo search, ICP scoring, signals)
+    scheduler.py           # APScheduler: runs due agents on their configured schedule
+    app.py                 # Flask app: register/login, dashboard, agent config, send campaign
+    templates/, static/    # platform UI
 leads_template.csv     # example CSV for import-csv / the dashboard's Import panel
 ```
