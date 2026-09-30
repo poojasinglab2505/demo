@@ -3,7 +3,15 @@
 Manages business leads and sends them personalized cold emails via SendGrid.
 Leads can come from three sources: a **CSV you build yourself** (fully free),
 **Hunter.io's Domain Search** (free plan includes API access), or, if you have
-a paid Apollo.io plan, Apollo's People Search API.
+a paid Apollo.io plan, Apollo's People Search API. On top of that, leads get
+an automatic **ICP fit score**, you can attach free-text **buying-signal
+notes** (or run a best-effort free funding-news check), and outreach can use
+an **AI-personalized icebreaker** per lead instead of one fixed template line.
+
+This is a lighter-weight, self-hosted alternative to tools like Gojiberry AI —
+it covers ICP scoring, signal notes, and AI-personalized outreach, but
+deliberately does **not** automate LinkedIn connection requests/DMs the way
+those tools do (see below).
 
 ## Why not scrape LinkedIn directly?
 
@@ -21,6 +29,16 @@ automated lead search, use a licensed data provider instead:
 
 CSV import needs no API or payment at all — you supply the lead list yourself.
 
+## Why not automate LinkedIn outreach (connection requests, DMs)?
+
+Tools like Gojiberry AI also send LinkedIn connection requests and follow-up
+DMs automatically. That requires automating actions on your LinkedIn account
+(via their own session or a browser tool), which breaches LinkedIn's User
+Agreement the same way scraping does, and risks account restriction or ban.
+This project intentionally stops at **email** outreach, which has a normal,
+ToS-compliant API path (SendGrid) — if you want LinkedIn messaging too, that
+has to be a manual, human-in-the-loop step outside this tool.
+
 ## Setup
 
 ```bash
@@ -34,6 +52,7 @@ You'll need:
 - A [SendGrid](https://sendgrid.com) API key and a verified sender for sending mail.
 - Optionally, a [Hunter.io](https://hunter.io/api-keys) API key (free plan works) for automated lead search by company domain.
 - Optionally, a **paid** [Apollo.io](https://apollo.io) plan and API key, for richer automated lead search.
+- Optionally, an [Anthropic](https://console.anthropic.com) API key for AI-personalized icebreakers (small per-lead cost — see below).
 
 ## Usage
 
@@ -107,7 +126,48 @@ python -m leadgen.cli send --pitch "We help sales teams cut outreach time in hal
 
 # Honor an opt-out request immediately
 python -m leadgen.cli unsubscribe someone@example.com
+
+# Recompute ICP fit scores for all leads (e.g. after changing ICP keywords in .env)
+python -m leadgen.cli rescore
+
+# Attach a free-text buying-signal note to a lead
+python -m leadgen.cli add-signal jane@example.com "Raised Series A"
+
+# Best-effort free check for funding-news mentions of a lead's company
+python -m leadgen.cli check-funding-signal jane@example.com
+
+# Send with an AI-personalized icebreaker per lead (needs ANTHROPIC_API_KEY)
+python -m leadgen.cli send --pitch "We help sales teams cut outreach time in half." --use-ai-icebreaker --dry-run
 ```
+
+## ICP scoring, signals, and AI icebreakers
+
+**ICP fit scoring** (free, rule-based, automatic): every lead gets a 0-100
+score based on keyword overlap with `ICP_TITLE_KEYWORDS` / `ICP_INDUSTRY_KEYWORDS`
+in `.env`, plus small bonuses for having a company/LinkedIn URL on file.
+Scores are computed automatically on every import; after changing your ICP
+keywords, click **Rescore all leads** in the dashboard (or run
+`python -m leadgen.cli rescore`) to recompute them. Sort the lead table by
+fit with the "Sort by ICP fit" link.
+
+**Signal notes** (free): attach a free-text note to any lead — e.g. "Raised
+Series A", "New VP of Sales" — via the dashboard's per-lead note field or
+`python -m leadgen.cli add-signal <email> "<note>"`. There's also a
+best-effort **"Check funding news"** button / `check-funding-signal <email>`
+CLI command that searches Hacker News' free public search API for stories
+mentioning the lead's company alongside "funding" and logs any hits as
+signal notes. This is *not* comparable to a paid intent-data platform (Apollo
+intent add-ons, Clearbit, Crunchbase) — it's a zero-cost, best-effort
+starting point, and coverage is sparse.
+
+**AI-personalized icebreakers** (small cost per lead): instead of one fixed
+opening line for every recipient, check "AI-personalized icebreaker" when
+sending a campaign (or pass `--use-ai-icebreaker` to `leadgen send`) to have
+Claude write a unique, relevant opening sentence per lead from their title/
+company/industry. Requires `ANTHROPIC_API_KEY`. Uses `claude-sonnet-5-5` by
+default (`ICEBREAKER_MODEL` in `.env` to change it) — a short sentence per
+lead costs a small fraction of a cent, but it does add up across a large
+list, so it's opt-in rather than automatic.
 
 ## Compliance checklist (CAN-SPAM / GDPR)
 
@@ -127,11 +187,15 @@ leadgen/
   csv_import.py       # lead sourcing from a CSV file (no paid API needed)
   hunter_client.py     # lead sourcing via Hunter.io Domain Search (free plan works)
   apollo_client.py     # lead sourcing via Apollo.io People Search API (paid plan required)
-  emailer.py           # sending (SendGrid API)
-  email_gen.py         # renders personalized email from a Jinja2 template
-  templates/            # editable cold email template
-  storage.py            # SQLite: dedupe, sent/unsubscribe tracking
-  cli.py                # `import-csv`, `hunter-find`, `find`, `send`, `unsubscribe`, `serve` commands
-  web/                  # Flask dashboard (app.py, templates/, static/)
+  icp.py                # free, rule-based ICP fit scoring
+  signals.py            # free, best-effort funding-news lookup (HN search API)
+  icebreaker.py         # AI-personalized icebreaker generation (Claude API)
+  emailer.py            # sending (SendGrid API)
+  email_gen.py          # renders personalized email from a Jinja2 template
+  templates/             # editable cold email template
+  storage.py             # SQLite: dedupe, sent/unsubscribe tracking, ICP scores, signal notes
+  cli.py                 # `import-csv`, `hunter-find`, `find`, `send`, `rescore`, `add-signal`,
+                         # `check-funding-signal`, `unsubscribe`, `serve` commands
+  web/                   # Flask dashboard (app.py, templates/, static/)
 leads_template.csv     # example CSV for import-csv / the dashboard's Import panel
 ```

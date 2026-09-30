@@ -68,8 +68,31 @@
         <input type="checkbox" name="dry_run" checked>
         Dry run (preview only, don't actually send)
       </label>
+      <label class="checkbox">
+        <input type="checkbox" name="use_ai_icebreaker">
+        AI-personalized icebreaker <span class="hint">(uses Claude API, costs apply)</span>
+      </label>
       <button type="submit">Run campaign</button>
     </form>
+  </div>
+
+  <div class="panel">
+    <h2>ICP scoring &amp; signals</h2>
+    <p class="hint">
+      Leads are auto-scored 0-100 against your ICP_TITLE_KEYWORDS /
+      ICP_INDUSTRY_KEYWORDS (in .env) whenever you import. Use Rescore after
+      changing those settings.
+    </p>
+    <form method="post" action="{{ url_for('rescore') }}">
+      <button type="submit">Rescore all leads</button>
+    </form>
+    <p class="hint">
+      {% if sort_by_score %}
+        <a href="{{ url_for('index') }}">Show newest first</a>
+      {% else %}
+        <a href="{{ url_for('index', sort='score') }}">Sort by ICP fit</a>
+      {% endif %}
+    </p>
   </div>
 </section>
 
@@ -89,7 +112,7 @@
   <h2>Leads</h2>
   <table>
     <thead>
-      <tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr>
+      <tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Fit</th><th>Status</th><th>Signals</th><th></th></tr>
     </thead>
     <tbody>
       {% for lead in leads %}
@@ -98,7 +121,18 @@
         <td>{{ lead.title }}</td>
         <td>{{ lead.company }}</td>
         <td>{{ lead.email }}</td>
+        <td><span class="badge">{{ lead.icp_score }}</span></td>
         <td><span class="badge badge-{{ lead.status }}">{{ lead.status }}</span></td>
+        <td>
+          {% if lead.signal_notes %}<pre class="signal-notes">{{ lead.signal_notes }}</pre>{% endif %}
+          <form method="post" action="{{ url_for('add_signal', email=lead.email) }}" class="inline-form">
+            <input type="text" name="note" placeholder="Add a note...">
+            <button type="submit" class="link-button">Add</button>
+          </form>
+          <form method="post" action="{{ url_for('check_signal', email=lead.email) }}" class="inline-form">
+            <button type="submit" class="link-button">Check funding news</button>
+          </form>
+        </td>
         <td>
           {% if lead.status != 'unsubscribed' %}
           <form method="post" action="{{ url_for('unsubscribe', email=lead.email) }}">
@@ -108,7 +142,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6">No leads yet — import a CSV above to get started.</td></tr>
+      <tr><td colspan="8">No leads yet — import a CSV above to get started.</td></tr>
       {% endfor %}
     </tbody>
   </table>
