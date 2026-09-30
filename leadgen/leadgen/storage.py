@@ -2,6 +2,8 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from .icp import score_lead
+
 DB_PATH = Path(__file__).resolve().parent.parent / "leads.db"
 
 SCHEMA = """
@@ -14,9 +16,20 @@ CREATE TABLE IF NOT EXISTS leads (
     linkedin_url TEXT,
     industry TEXT,
     status TEXT NOT NULL DEFAULT 'new',   -- new | drafted | sent | bounced | unsubscribed
-    sent_at TEXT
+    sent_at TEXT,
+    icp_score INTEGER NOT NULL DEFAULT 0,
+    signal_notes TEXT NOT NULL DEFAULT ''
 );
 """
+
+
+def _migrate(conn):
+    """Adds columns introduced after the original schema, for existing leads.db files."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(leads)")}
+    if "icp_score" not in cols:
+        conn.execute("ALTER TABLE leads ADD COLUMN icp_score INTEGER NOT NULL DEFAULT 0")
+    if "signal_notes" not in cols:
+        conn.execute("ALTER TABLE leads ADD COLUMN signal_notes TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager
@@ -25,6 +38,7 @@ def connect():
     conn.row_factory = sqlite3.Row
     try:
         conn.execute(SCHEMA)
+        _migrate(conn)
         yield conn
         conn.commit()
     finally:
@@ -70,8 +84,9 @@ def leads_to_email(conn, limit: int):
     ).fetchall()
 
 
-def list_leads(conn):
-    return conn.execute("SELECT * FROM leads ORDER BY rowid DESC").fetchall()
+def list_leads(conn, sort_by_score: bool = False):
+    order = "icp_score DESC, rowid DESC" if sort_by_score else "rowid DESC"
+    return conn.execute(f"SELECT * FROM leads ORDER BY {order}").fetchall()
 
 
 def status_counts(conn) -> dict:
@@ -79,3 +94,18 @@ def status_counts(conn) -> dict:
     counts = {row["status"]: row["n"] for row in rows}
     counts["total"] = sum(counts.values())
     return counts
+
+
+def recompute_icp_scores(conn, icp) -> int:
+    rows = conn.execute("SELECT email, title, company, industry, linkedin_url FROM leads").fetchall()
+    for row in rows:
+        score = score_lead(row["title"], row["company"], row["industry"], row["linkedin_url"], icp)
+        conn.execute("UPDATE leads SET icp_score = ? WHERE email = ?", (score, row["email"]))
+    return len(rows)
+
+
+def add_signal_note(conn, email: str, note: str):
+    conn.execute(
+        "UPDATE leads SET signal_notes = TRIM(signal_notes || ?, char(10)) WHERE email = ?",
+        (f"\n- {note}", email),
+    )

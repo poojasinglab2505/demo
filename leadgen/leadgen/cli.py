@@ -8,15 +8,24 @@ from .csv_import import parse_leads_csv
 from .email_gen import render_email
 from .emailer import SendGridClient
 from .hunter_client import HunterClient
+from .icebreaker import generate_icebreaker
+from .icp import ICPConfig
+from .signals import check_funding_mentions
 from .storage import (
+    add_signal_note,
     already_sent,
     connect,
     is_unsubscribed,
     leads_to_email,
     mark_sent,
     mark_unsubscribed,
+    recompute_icp_scores,
     upsert_lead,
 )
+
+
+def _icp_from_settings(settings: Settings) -> ICPConfig:
+    return ICPConfig.from_csv(settings.icp_title_keywords, settings.icp_industry_keywords)
 
 
 @click.group()
@@ -51,6 +60,7 @@ def find(titles, industries, locations, max_results):
                 continue
             if upsert_lead(conn, lead):
                 added += 1
+        recompute_icp_scores(conn, _icp_from_settings(settings))
     click.echo(f"Found {len(leads)} leads, added {added} new ones to leads.db")
 
 
@@ -72,6 +82,7 @@ def hunter_find(domain, company_name, max_results):
         for lead in leads:
             if upsert_lead(conn, lead):
                 added += 1
+        recompute_icp_scores(conn, _icp_from_settings(settings))
     click.echo(f"Found {len(leads)} leads at {domain}, added {added} new ones to leads.db")
 
 
@@ -84,6 +95,7 @@ def import_csv_cmd(csv_path):
     title, company, linkedin_url, industry. Header names are matched
     loosely (e.g. "Email Address" or "First Name" both work).
     """
+    settings = Settings.load()
     with open(csv_path, encoding="utf-8-sig") as f:
         leads = parse_leads_csv(f.read())
 
@@ -92,14 +104,61 @@ def import_csv_cmd(csv_path):
         for lead in leads:
             if upsert_lead(conn, lead):
                 added += 1
+        recompute_icp_scores(conn, _icp_from_settings(settings))
     click.echo(f"Parsed {len(leads)} rows, added {added} new leads to leads.db")
+
+
+@cli.command()
+def rescore():
+    """Recompute ICP fit scores for all leads (see ICP_TITLE_KEYWORDS / ICP_INDUSTRY_KEYWORDS in .env)."""
+    settings = Settings.load()
+    with connect() as conn:
+        count = recompute_icp_scores(conn, _icp_from_settings(settings))
+    click.echo(f"Recomputed ICP scores for {count} leads.")
+
+
+@cli.command(name="add-signal")
+@click.argument("email")
+@click.argument("note")
+def add_signal_cmd(email, note):
+    """Attach a free-text buying-signal note to a lead (e.g. "Raised Series A")."""
+    with connect() as conn:
+        add_signal_note(conn, email, note)
+    click.echo(f"Added signal note to {email}.")
+
+
+@cli.command(name="check-funding-signal")
+@click.argument("email")
+def check_funding_signal_cmd(email):
+    """Best-effort, free check for recent funding-related HN mentions of a lead's company.
+
+    Not comparable to a paid intent-data platform — just a zero-cost signal
+    source. See leadgen/signals.py for the caveats.
+    """
+    with connect() as conn:
+        row = conn.execute("SELECT company FROM leads WHERE email = ?", (email,)).fetchone()
+        if not row:
+            click.echo(f"No lead found for {email}.")
+            return
+        hits = check_funding_mentions(row["company"])
+        if not hits:
+            click.echo(f"No funding mentions found for {row['company']}.")
+            return
+        for hit in hits:
+            add_signal_note(conn, email, f"Funding mention: {hit}")
+        click.echo(f"Found {len(hits)} mention(s), added as signal notes.")
 
 
 @cli.command()
 @click.option("--pitch", required=True, help="One or two sentences describing your offer.")
 @click.option("--limit", default=50, show_default=True, help="Max number of emails to send this run.")
 @click.option("--dry-run", is_flag=True, help="Print emails instead of sending them.")
-def send(pitch, limit, dry_run):
+@click.option(
+    "--use-ai-icebreaker",
+    is_flag=True,
+    help="Generate a unique opening sentence per lead via the Claude API (needs ANTHROPIC_API_KEY, costs apply).",
+)
+def send(pitch, limit, dry_run, use_ai_icebreaker):
     """Draft and send cold emails to leads that haven't been emailed yet."""
     settings = Settings.load()
     limit = min(limit, settings.daily_send_limit)
@@ -117,8 +176,19 @@ def send(pitch, limit, dry_run):
             if is_unsubscribed(conn, row["email"]) or already_sent(conn, row["email"]):
                 continue
 
+            icebreaker = ""
+            if use_ai_icebreaker:
+                icebreaker = generate_icebreaker(
+                    settings.anthropic_api_key,
+                    row["first_name"],
+                    row["title"],
+                    row["company"],
+                    row["industry"],
+                    settings.icebreaker_model,
+                )
+
             subject, body = render_email(
-                row, pitch, settings.from_name, settings.company_postal_address
+                row, pitch, settings.from_name, settings.company_postal_address, icebreaker
             )
 
             if dry_run:

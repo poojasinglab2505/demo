@@ -10,16 +10,25 @@ from ..csv_import import parse_leads_csv
 from ..email_gen import render_email
 from ..emailer import SendGridClient
 from ..hunter_client import HunterClient
+from ..icebreaker import generate_icebreaker
+from ..icp import ICPConfig
+from ..signals import check_funding_mentions
 from ..storage import (
+    add_signal_note,
     already_sent,
     connect,
     is_unsubscribed,
     list_leads,
     mark_sent,
     mark_unsubscribed,
+    recompute_icp_scores,
     status_counts,
     upsert_lead,
 )
+
+
+def _icp_from_settings(settings: Settings) -> ICPConfig:
+    return ICPConfig.from_csv(settings.icp_title_keywords, settings.icp_industry_keywords)
 
 
 def create_app() -> Flask:
@@ -41,10 +50,11 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
+        sort_by_score = request.args.get("sort") == "score"
         with connect() as conn:
-            leads = list_leads(conn)
+            leads = list_leads(conn, sort_by_score=sort_by_score)
             counts = status_counts(conn)
-        return render_template("index.html", leads=leads, counts=counts)
+        return render_template("index.html", leads=leads, counts=counts, sort_by_score=sort_by_score)
 
     @app.route("/import", methods=["POST"])
     def import_csv():
@@ -60,11 +70,13 @@ def create_app() -> Flask:
             flash(f"CSV import failed: {exc}", "error")
             return redirect(url_for("index"))
 
+        settings = Settings.load()
         added = 0
         with connect() as conn:
             for lead in leads:
                 if upsert_lead(conn, lead):
                     added += 1
+            recompute_icp_scores(conn, _icp_from_settings(settings))
 
         flash(f"Imported {len(leads)} rows, added {added} new leads.", "success")
         return redirect(url_for("index"))
@@ -92,6 +104,7 @@ def create_app() -> Flask:
             for lead in leads:
                 if upsert_lead(conn, lead):
                     added += 1
+            recompute_icp_scores(conn, _icp_from_settings(settings))
 
         flash(f"Found {len(leads)} leads at {domain}, added {added} new ones.", "success")
         return redirect(url_for("index"))
@@ -119,8 +132,44 @@ def create_app() -> Flask:
             for lead in leads:
                 if lead.email and upsert_lead(conn, lead):
                     added += 1
+            recompute_icp_scores(conn, _icp_from_settings(settings))
 
         flash(f"Found {len(leads)} leads, added {added} new ones.", "success")
+        return redirect(url_for("index"))
+
+    @app.route("/rescore", methods=["POST"])
+    def rescore():
+        settings = Settings.load()
+        with connect() as conn:
+            count = recompute_icp_scores(conn, _icp_from_settings(settings))
+        flash(f"Recomputed ICP scores for {count} leads.", "success")
+        return redirect(url_for("index"))
+
+    @app.route("/signal/<email>", methods=["POST"])
+    def add_signal(email):
+        note = request.form.get("note", "").strip()
+        if not note:
+            flash("Enter a signal note to add.", "error")
+            return redirect(url_for("index"))
+        with connect() as conn:
+            add_signal_note(conn, email, note)
+        flash(f"Added signal note to {email}.", "success")
+        return redirect(url_for("index"))
+
+    @app.route("/check-signal/<email>", methods=["POST"])
+    def check_signal(email):
+        with connect() as conn:
+            row = conn.execute("SELECT company FROM leads WHERE email = ?", (email,)).fetchone()
+            if not row:
+                flash(f"No lead found for {email}.", "error")
+                return redirect(url_for("index"))
+            hits = check_funding_mentions(row["company"])
+            for hit in hits:
+                add_signal_note(conn, email, f"Funding mention: {hit}")
+        if hits:
+            flash(f"Found {len(hits)} mention(s) for {row['company']}, added as signal notes.", "success")
+        else:
+            flash(f"No funding mentions found for {row['company']}.", "success")
         return redirect(url_for("index"))
 
     @app.route("/send", methods=["POST"])
@@ -129,6 +178,7 @@ def create_app() -> Flask:
         pitch = request.form.get("pitch", "").strip()
         limit = min(int(request.form.get("limit") or 50), settings.daily_send_limit)
         dry_run = request.form.get("dry_run") == "on"
+        use_ai_icebreaker = request.form.get("use_ai_icebreaker") == "on"
 
         if not pitch:
             flash("Write a pitch before sending a campaign.", "error")
@@ -150,7 +200,24 @@ def create_app() -> Flask:
             for row in leads_to_email(conn, limit):
                 if is_unsubscribed(conn, row["email"]) or already_sent(conn, row["email"]):
                     continue
-                subject, body = render_email(row, pitch, settings.from_name, settings.company_postal_address)
+
+                icebreaker = ""
+                if use_ai_icebreaker:
+                    try:
+                        icebreaker = generate_icebreaker(
+                            settings.anthropic_api_key,
+                            row["first_name"],
+                            row["title"],
+                            row["company"],
+                            row["industry"],
+                            settings.icebreaker_model,
+                        )
+                    except Exception as exc:
+                        flash(f"AI icebreaker failed for {row['email']}: {exc}", "error")
+
+                subject, body = render_email(
+                    row, pitch, settings.from_name, settings.company_postal_address, icebreaker
+                )
                 if dry_run:
                     previews.append({"email": row["email"], "subject": subject, "body": body})
                     continue

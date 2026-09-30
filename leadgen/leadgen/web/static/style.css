@@ -157,6 +157,26 @@ th { color: var(--muted); font-weight: 500; }
 .badge-sent { background: rgba(62, 207, 142, 0.2); color: var(--success); }
 .badge-unsubscribed { background: rgba(255, 107, 107, 0.2); color: var(--error); }
 
+.signal-notes {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+}
+
+.inline-form {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.3rem;
+}
+
+.inline-form input[type="text"] {
+  margin-top: 0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.78rem;
+}
+
 .flash { list-style: none; padding: 0; margin-bottom: 1.5rem; }
 .flash li { padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 0.5rem; font-size: 0.9rem; }
 .flash-success { background: rgba(62, 207, 142, 0.15); color: var(--success); }
